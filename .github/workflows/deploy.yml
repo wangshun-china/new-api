@@ -1,8 +1,6 @@
 name: Build and Deploy New API
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       target_env:
@@ -12,9 +10,10 @@ on:
         type: choice
         options:
           - wsl
+          - aliyun
 
 concurrency:
-  group: new-api-deploy-${{ github.event.inputs.target_env || 'wsl' }}
+  group: new-api-deploy-${{ github.event.inputs.target_env }}
   cancel-in-progress: false
 
 env:
@@ -30,13 +29,7 @@ jobs:
       - name: Resolve target environment
         id: resolve
         shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TARGET_ENV="${{ github.event.inputs.target_env }}"
-          else
-            TARGET_ENV="wsl"
-          fi
-          echo "target_env=${TARGET_ENV}" >> "$GITHUB_OUTPUT"
+        run: echo "target_env=${{ github.event.inputs.target_env }}" >> "$GITHUB_OUTPUT"
 
   build-and-push:
     name: Build and push image
