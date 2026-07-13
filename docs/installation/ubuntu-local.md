@@ -86,3 +86,23 @@ NEW_API_PORT=7777
 3. 创建普通用户，让用户自行创建令牌。
 4. 使用统一模型名发起一次非流式请求和一次流式请求。
 5. 禁用该普通用户，确认原令牌不能继续调用。
+
+## GitHub Actions 自动部署
+
+仓库中的 `Build and Deploy New API` 工作流支持两种触发方式：
+
+- 向 `main` 分支推送提交后，自动构建镜像并部署到带有 `wsl` 标签的 Self-hosted Runner。
+- 在 GitHub 仓库的 `Actions` 页面选择该工作流，通过 `Run workflow` 手动部署。
+
+工作流使用 GHCR 保存当前源码构建出的镜像，并在目标 Runner 上复用
+`new-api-local` Compose 项目及其 MySQL、Redis 数据卷。部署前需要配置以下仓库
+Secrets：
+
+- `NEW_API_MYSQL_ROOT_PASSWORD`
+- `NEW_API_MYSQL_PASSWORD`
+- `NEW_API_REDIS_PASSWORD`
+- `NEW_API_SESSION_SECRET`
+- `NEW_API_CRYPTO_SECRET`
+
+Self-hosted Runner 必须安装 Docker、Docker Compose v2 和 curl，并带有 `wsl`
+标签。部署入口固定为 `http://<Runner-IP>:7777`。

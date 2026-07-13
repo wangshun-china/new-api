@@ -1,0 +1,175 @@
+name: Build and Deploy New API
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: Deployment target
+        required: true
+        default: wsl
+        type: choice
+        options:
+          - wsl
+
+concurrency:
+  group: new-api-deploy-${{ github.event.inputs.target_env || 'wsl' }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}
+
+jobs:
+  resolve-context:
+    name: Resolve deploy context
+    runs-on: ubuntu-latest
+    outputs:
+      target_env: ${{ steps.resolve.outputs.target_env }}
+    steps:
+      - name: Resolve target environment
+        id: resolve
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TARGET_ENV="${{ github.event.inputs.target_env }}"
+          else
+            TARGET_ENV="wsl"
+          fi
+          echo "target_env=${TARGET_ENV}" >> "$GITHUB_OUTPUT"
+
+  build-and-push:
+    name: Build and push image
+    needs: resolve-context
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set image version
+        shell: bash
+        run: echo "custom-${GITHUB_SHA::7}" > VERSION
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tag
+        id: image
+        shell: bash
+        run: echo "image=${IMAGE_REPOSITORY}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.image.outputs.image }}
+            ${{ env.IMAGE_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to ${{ needs.resolve-context.outputs.target_env }}
+    needs: [resolve-context, build-and-push]
+    runs-on: [self-hosted, "${{ needs.resolve-context.outputs.target_env }}"]
+    environment: ${{ needs.resolve-context.outputs.target_env }}
+    permissions:
+      contents: read
+      packages: read
+    env:
+      NEW_API_IMAGE: ${{ needs.build-and-push.outputs.image }}
+      NEW_API_MYSQL_ROOT_PASSWORD: ${{ secrets.NEW_API_MYSQL_ROOT_PASSWORD }}
+      NEW_API_MYSQL_PASSWORD: ${{ secrets.NEW_API_MYSQL_PASSWORD }}
+      NEW_API_REDIS_PASSWORD: ${{ secrets.NEW_API_REDIS_PASSWORD }}
+      NEW_API_SESSION_SECRET: ${{ secrets.NEW_API_SESSION_SECRET }}
+      NEW_API_CRYPTO_SECRET: ${{ secrets.NEW_API_CRYPTO_SECRET }}
+    steps:
+      - name: Checkout deployment files
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy with Docker Compose
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          required=(
+            NEW_API_MYSQL_ROOT_PASSWORD
+            NEW_API_MYSQL_PASSWORD
+            NEW_API_REDIS_PASSWORD
+            NEW_API_SESSION_SECRET
+            NEW_API_CRYPTO_SECRET
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+
+          DEPLOY_DIR="${RUNNER_TEMP}/new-api-prod"
+          mkdir -p "$DEPLOY_DIR"
+          cp deploy/docker-compose.local.yml "$DEPLOY_DIR/docker-compose.yml"
+
+          umask 077
+          cat > "$DEPLOY_DIR/.env" <<EOF
+          COMPOSE_PROJECT_NAME=new-api-local
+          NEW_API_BIND_ADDRESS=0.0.0.0
+          NEW_API_PORT=7777
+          NEW_API_IMAGE=${NEW_API_IMAGE}
+          LOCAL_IMAGE=new-api:local
+          NODE_NAME=new-api-wsl-1
+          TZ=Asia/Shanghai
+          MYSQL_DATABASE=new_api
+          MYSQL_USER=newapi
+          MYSQL_ROOT_PASSWORD=${NEW_API_MYSQL_ROOT_PASSWORD}
+          MYSQL_PASSWORD=${NEW_API_MYSQL_PASSWORD}
+          REDIS_PASSWORD=${NEW_API_REDIS_PASSWORD}
+          SESSION_SECRET=${NEW_API_SESSION_SECRET}
+          CRYPTO_SECRET=${NEW_API_CRYPTO_SECRET}
+          RELAY_TIMEOUT=0
+          STREAMING_TIMEOUT=300
+          MAX_REQUEST_BODY_MB=128
+          STREAM_SCANNER_MAX_BUFFER_MB=128
+          EOF
+          chmod 600 "$DEPLOY_DIR/.env"
+
+          cd "$DEPLOY_DIR"
+          docker compose --env-file .env -f docker-compose.yml config --quiet
+          docker compose --env-file .env -f docker-compose.yml pull
+
+          if ! docker compose --env-file .env -f docker-compose.yml up \
+            -d --remove-orphans --wait --wait-timeout 600; then
+            docker compose --env-file .env -f docker-compose.yml ps
+            docker compose --env-file .env -f docker-compose.yml logs \
+              --tail 150 new-api mysql redis
+            exit 1
+          fi
+
+          curl --fail --silent --show-error \
+            http://127.0.0.1:7777/api/status >/dev/null
+          docker compose --env-file .env -f docker-compose.yml ps
+          docker image prune -f
+
+          echo "Deployment completed: ${NEW_API_IMAGE}"
