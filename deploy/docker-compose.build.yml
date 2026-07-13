@@ -1,0 +1,6 @@
+services:
+  new-api:
+    image: ${LOCAL_IMAGE:-new-api:local}
+    build:
+      context: .
+      dockerfile: Dockerfile

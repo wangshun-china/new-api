@@ -1,0 +1,116 @@
+name: ${COMPOSE_PROJECT_NAME:-new-api-local}
+
+services:
+  new-api:
+    image: ${NEW_API_IMAGE:-calciumion/new-api:v1.0.0-rc.21}
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    ports:
+      - "${NEW_API_BIND_ADDRESS:-0.0.0.0}:${NEW_API_PORT:-7777}:3000"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      SQL_DSN: "${MYSQL_USER:-newapi}:${MYSQL_PASSWORD:?set MYSQL_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-new_api}?charset=utf8mb4&parseTime=True&loc=Local"
+      REDIS_CONN_STRING: "redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0"
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+      CRYPTO_SECRET: ${CRYPTO_SECRET:?set CRYPTO_SECRET}
+      NODE_NAME: ${NODE_NAME:-new-api-local-1}
+      ERROR_LOG_ENABLED: "true"
+      BATCH_UPDATE_ENABLED: "true"
+      MEMORY_CACHE_ENABLED: "true"
+      GENERATE_DEFAULT_TOKEN: "false"
+      RELAY_TIMEOUT: ${RELAY_TIMEOUT:-0}
+      STREAMING_TIMEOUT: ${STREAMING_TIMEOUT:-300}
+      MAX_REQUEST_BODY_MB: ${MAX_REQUEST_BODY_MB:-128}
+      STREAM_SCANNER_MAX_BUFFER_MB: ${STREAM_SCANNER_MAX_BUFFER_MB:-128}
+      SESSION_COOKIE_SECURE: "false"
+    volumes:
+      - new-api-data:/data
+      - new-api-logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -q -O - http://127.0.0.1:3000/api/status |
+          grep -q '"success":[[:space:]]*true'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - new-api-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-new_api}
+      MYSQL_USER: ${MYSQL_USER:-newapi}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -uroot -p"$${MYSQL_ROOT_PASSWORD}" --silent
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - new-api-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    command:
+      - /bin/sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - REDISCLI_AUTH="$${REDIS_PASSWORD}" redis-cli ping | grep -q PONG
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - new-api-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  new-api-data:
+  new-api-logs:
+  mysql-data:
+  redis-data:
+
+networks:
+  new-api-network:
+    driver: bridge
