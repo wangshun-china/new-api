@@ -18,7 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { ArrowRight, Flame, ShieldCheck, TrendingDown } from 'lucide-react'
+import {
+  Activity,
+  ArrowRight,
+  Flame,
+  ShieldCheck,
+  TrendingDown,
+} from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -30,6 +36,7 @@ import type { QuotaDataItem } from '@/features/dashboard/types'
 import { useStatus } from '@/hooks/use-status'
 import { getCurrencyLabel, isCurrencyDisplayEnabled } from '@/lib/currency'
 import { formatNumber, formatQuota } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -145,6 +152,7 @@ export function SummaryCards() {
   const remainQuota = Number(user?.quota ?? 0)
   const usedQuota = Number(user?.used_quota ?? 0)
   const requestCount = Number(user?.request_count ?? 0)
+  const isAdmin = Number(user?.role ?? 0) >= ROLE.ADMIN
 
   const usageTrendQuery = useQuery({
     queryKey: [
@@ -206,6 +214,15 @@ export function SummaryCards() {
     [usageTrendQuery.data?.data]
   )
 
+  const recentRequestCount = useMemo(
+    () =>
+      (usageTrendQuery.data?.data ?? []).reduce(
+        (total, item) => total + (Number(item.count) || 0),
+        0
+      ),
+    [usageTrendQuery.data?.data]
+  )
+
   const healthLevel = getHealthLevel(remainQuota, recentUsage)
   const healthCfg = HEALTH_CONFIG[healthLevel]
   const runwayDays = getRunwayDays(remainQuota, recentUsage)
@@ -248,6 +265,60 @@ export function SummaryCards() {
       sparklineVariant: 'line' as const,
     }
   })
+
+  if (!isAdmin) {
+    const requestItems = [
+      {
+        key: 'requests',
+        title: t('API Requests'),
+        value: formatNumber(requestCount),
+        description: t('Total requests made'),
+        icon: Activity,
+        tone: 'accent-1' as const,
+      },
+      {
+        key: 'requests24h',
+        title: t('Requests (24h)'),
+        value: formatNumber(recentRequestCount),
+        description: t('Requests / 24h'),
+        icon: Flame,
+        tone: 'accent-2' as const,
+      },
+    ]
+
+    return (
+      <div className='bg-card overflow-hidden rounded-2xl border p-3 shadow-xs sm:p-5'>
+        <div className='flex flex-col gap-1'>
+          <h3 className='text-sm font-semibold sm:text-base'>
+            {t('Usage at a glance')}
+          </h3>
+          <p className='text-muted-foreground text-xs sm:text-sm'>
+            {t('Request Count')}
+          </p>
+        </div>
+        <StaggerContainer className='mt-3 grid grid-cols-2 gap-1.5 sm:gap-3'>
+          {requestItems.map((item) => (
+            <StaggerItem
+              key={item.key}
+              className='bg-background/60 rounded-lg border px-2 py-1.5 sm:rounded-xl sm:p-3'
+            >
+              <StatCard
+                title={item.title}
+                value={item.value}
+                description={item.description}
+                icon={item.icon}
+                tone={item.tone}
+                sparkline={sparklineData.requests}
+                sparklineVariant='line'
+                loading={loading}
+                compactMobile
+              />
+            </StaggerItem>
+          ))}
+        </StaggerContainer>
+      </div>
+    )
+  }
 
   return (
     <div className='bg-card overflow-hidden rounded-2xl border shadow-xs'>

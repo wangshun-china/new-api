@@ -21,7 +21,8 @@ import { useTranslation } from 'react-i18next'
 
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatQuota } from '@/lib/format'
+import { formatNumber, formatQuota } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
 
 import type { UserWalletData } from '../types'
 
@@ -46,38 +47,55 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
     )
   }
 
+  const isAdmin = (props.user?.role ?? 0) >= ROLE.ADMIN
   const stats: {
     label: string
     value: string
     description: string
     icon: typeof WalletCards
     tone: IconBadgeTone
-  }[] = [
-    {
-      label: t('Current Balance'),
-      value: formatQuota(props.user?.quota ?? 0),
-      description: t('Remaining quota'),
-      icon: WalletCards,
-      tone: 'success',
-    },
-    {
-      label: t('Total Usage'),
-      value: formatQuota(props.user?.used_quota ?? 0),
-      description: t('Total consumed quota'),
-      icon: BarChart3,
-      tone: 'info',
-    },
-    {
-      label: t('API Requests'),
-      value: (props.user?.request_count ?? 0).toLocaleString(),
-      description: t('Total requests made'),
-      icon: Activity,
-      tone: 'chart-4',
-    },
-  ]
+  }[] = isAdmin
+    ? [
+        {
+          label: t('Current Balance'),
+          value: formatQuota(props.user?.quota ?? 0),
+          description: t('Remaining quota'),
+          icon: WalletCards,
+          tone: 'success',
+        },
+        {
+          label: t('Total Usage'),
+          value: formatQuota(props.user?.used_quota ?? 0),
+          description: t('Total consumed quota'),
+          icon: BarChart3,
+          tone: 'info',
+        },
+        {
+          label: t('API Requests'),
+          value: formatNumber(props.user?.request_count ?? 0),
+          description: t('Total requests made'),
+          icon: Activity,
+          tone: 'chart-4',
+        },
+      ]
+    : [
+        {
+          label: t('API Requests'),
+          value: formatNumber(props.user?.request_count ?? 0),
+          description: t('Total requests made'),
+          icon: Activity,
+          tone: 'chart-4',
+        },
+      ]
 
   return (
-    <div className='grid grid-cols-3 divide-x rounded-lg border'>
+    <div
+      className={
+        isAdmin
+          ? 'grid grid-cols-3 divide-x rounded-lg border'
+          : 'grid grid-cols-1 rounded-lg border'
+      }
+    >
       {stats.map((item) => (
         <div key={item.label} className='min-w-0 px-2.5 py-2.5 sm:px-5 sm:py-4'>
           <div className='flex items-center gap-1.5 sm:gap-2.5'>

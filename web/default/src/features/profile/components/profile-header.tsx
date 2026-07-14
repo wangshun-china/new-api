@@ -25,8 +25,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
-import { formatCompactNumber, formatQuota } from '@/lib/format'
-import { getRoleLabel } from '@/lib/roles'
+import { formatNumber, formatQuota } from '@/lib/format'
+import { getRoleLabel, ROLE } from '@/lib/roles'
 
 import { getDisplayName } from '../lib'
 import type { UserProfile } from '../types'
@@ -84,35 +84,46 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const avatarFallback = getUserAvatarFallback(avatarName)
   const avatarFallbackStyle = getUserAvatarStyle(avatarName)
   const roleLabel = getRoleLabel(profile.role)
+  const isAdmin = profile.role >= ROLE.ADMIN
   const stats: {
     label: string
     value: string
     description: string
     icon: typeof WalletCards
     tone: IconBadgeTone
-  }[] = [
-    {
-      label: t('Current Balance'),
-      value: formatQuota(profile.quota),
-      description: t('Remaining quota'),
-      icon: WalletCards,
-      tone: 'success',
-    },
-    {
-      label: t('Total Usage'),
-      value: formatQuota(profile.used_quota),
-      description: t('Total consumed quota'),
-      icon: BarChart3,
-      tone: 'info',
-    },
-    {
-      label: t('API Requests'),
-      value: formatCompactNumber(profile.request_count),
-      description: t('Total requests made'),
-      icon: Activity,
-      tone: 'chart-4',
-    },
-  ]
+  }[] = isAdmin
+    ? [
+        {
+          label: t('Current Balance'),
+          value: formatQuota(profile.quota),
+          description: t('Remaining quota'),
+          icon: WalletCards,
+          tone: 'success',
+        },
+        {
+          label: t('Total Usage'),
+          value: formatQuota(profile.used_quota),
+          description: t('Total consumed quota'),
+          icon: BarChart3,
+          tone: 'info',
+        },
+        {
+          label: t('API Requests'),
+          value: formatNumber(profile.request_count),
+          description: t('Total requests made'),
+          icon: Activity,
+          tone: 'chart-4',
+        },
+      ]
+    : [
+        {
+          label: t('API Requests'),
+          value: formatNumber(profile.request_count),
+          description: t('Total requests made'),
+          icon: Activity,
+          tone: 'chart-4',
+        },
+      ]
 
   return (
     <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
@@ -163,7 +174,13 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
         </div>
       </CardContent>
       <div className='border-t'>
-        <div className='divide-border/60 grid grid-cols-3 divide-x'>
+        <div
+          className={
+            isAdmin
+              ? 'divide-border/60 grid grid-cols-3 divide-x'
+              : 'grid grid-cols-1'
+          }
+        >
           {stats.map((item) => (
             <div key={item.label} className='min-w-0 px-3 py-3 sm:px-5 sm:py-4'>
               <div className='flex items-center gap-2'>
