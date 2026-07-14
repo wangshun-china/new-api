@@ -51,12 +51,15 @@ import {
   updateBillingPreference,
 } from '@/features/subscriptions/api'
 import { SubscriptionPurchaseDialog } from '@/features/subscriptions/components/dialogs/subscription-purchase-dialog'
-import { formatDuration, formatResetPeriod } from '@/features/subscriptions/lib'
+import {
+  formatDuration,
+  formatResetPeriod,
+  formatSubscriptionRequestCount,
+} from '@/features/subscriptions/lib'
 import type {
   PlanRecord,
   UserSubscriptionRecord,
 } from '@/features/subscriptions/types'
-import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import type { PaymentMethod, TopupInfo } from '../types'
@@ -480,19 +483,21 @@ export function SubscriptionPlansCard({
                         </div>
                       )}
                       <div className='text-muted-foreground mt-1'>
-                        {t('Total Quota')}:{' '}
+                        {t('Requests')}:{' '}
                         {totalAmount > 0 ? (
                           <Tooltip>
                             <TooltipTrigger
                               render={<span className='cursor-help' />}
                             >
-                              {formatQuota(usedAmount)}/
-                              {formatQuota(totalAmount)} · {t('Remaining')}{' '}
-                              {formatQuota(remainAmount)}
+                              {formatSubscriptionRequestCount(usedAmount)}/
+                              {formatSubscriptionRequestCount(totalAmount)} ·{' '}
+                              {t('Remaining')}{' '}
+                              {formatSubscriptionRequestCount(remainAmount)}
                             </TooltipTrigger>
                             <TooltipContent>
-                              {t('Raw Quota')}: {usedAmount}/{totalAmount} ·{' '}
-                              {t('Remaining')} {remainAmount}
+                              {t(
+                                'Quota is shown as equivalent requests at $0.01 each. Model and group multipliers may consume it faster.'
+                              )}
                             </TooltipContent>
                           </Tooltip>
                         ) : (
@@ -540,8 +545,8 @@ export function SubscriptionPlansCard({
                   ? `${t('Quota Reset')}: ${formatResetPeriod(plan, t)}`
                   : null,
                 totalAmount > 0
-                  ? `${t('Total Quota')}: ${formatQuota(totalAmount)}`
-                  : `${t('Total Quota')}: ${t('Unlimited')}`,
+                  ? `${t('Requests')}: ${formatSubscriptionRequestCount(totalAmount)}`
+                  : `${t('Requests')}: ${t('Unlimited')}`,
                 limit > 0 ? `${t('Purchase Limit')}: ${limit}` : null,
                 plan.upgrade_group
                   ? `${t('Upgrade Group')}: ${plan.upgrade_group}`

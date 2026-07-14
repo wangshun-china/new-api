@@ -18,9 +18,27 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
 
+import { getCurrencyDisplay } from '@/lib/currency'
 import dayjs from '@/lib/dayjs'
+import { formatNumber } from '@/lib/format'
 
 import type { SubscriptionPlan } from '../types'
+
+const SUBSCRIPTION_REQUEST_PRICE_USD = 0.01
+
+export function quotaUnitsToRequestCount(
+  quotaUnits: number,
+  quotaPerUnit: number
+): number {
+  if (!Number.isFinite(quotaUnits) || !Number.isFinite(quotaPerUnit)) return 0
+  if (quotaUnits <= 0 || quotaPerUnit <= 0) return 0
+  return quotaUnits / (quotaPerUnit * SUBSCRIPTION_REQUEST_PRICE_USD)
+}
+
+export function formatSubscriptionRequestCount(quotaUnits: number): string {
+  const { config } = getCurrencyDisplay()
+  return formatNumber(quotaUnitsToRequestCount(quotaUnits, config.quotaPerUnit))
+}
 
 export function formatDuration(
   plan: Partial<SubscriptionPlan>,
