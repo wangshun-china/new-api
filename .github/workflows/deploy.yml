@@ -1,23 +1,30 @@
 name: Build and Deploy New API
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       target_env:
         description: Deployment target
         required: true
-        default: wsl
+        default: aliyun
         type: choice
         options:
           - wsl
           - aliyun
 
 concurrency:
-  group: new-api-deploy-${{ github.event.inputs.target_env }}
+  group: new-api-deploy-${{ github.event.inputs.target_env || 'aliyun' }}
   cancel-in-progress: false
 
 env:
-  IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}
+  GHCR_REGISTRY: ghcr.io
+  GHCR_IMAGE_NAME: ${{ github.repository_owner }}/${{ github.event.repository.name }}
+  ALIYUN_ACR_REGISTRY: ${{ vars.ALIYUN_ACR_REGISTRY }}
+  ALIYUN_ACR_USERNAME: ${{ vars.ALIYUN_ACR_USERNAME }}
+  ALIYUN_ACR_PASSWORD: ${{ secrets.ALIYUN_ACR_PASSWORD }}
+  NEW_API_IMAGE_NAME: ${{ vars.NEW_API_IMAGE_NAME }}
 
 jobs:
   resolve-context:
@@ -29,7 +36,7 @@ jobs:
       - name: Resolve target environment
         id: resolve
         shell: bash
-        run: echo "target_env=${{ github.event.inputs.target_env }}" >> "$GITHUB_OUTPUT"
+        run: echo "target_env=${{ github.event.inputs.target_env || 'aliyun' }}" >> "$GITHUB_OUTPUT"
 
   build-and-push:
     name: Build and push image
@@ -38,8 +45,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      image: ${{ steps.image.outputs.image }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -54,14 +59,16 @@ jobs:
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.GHCR_REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
-      - name: Resolve image tag
-        id: image
-        shell: bash
-        run: echo "image=${IMAGE_REPOSITORY}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Log in to Aliyun ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ALIYUN_ACR_REGISTRY }}
+          username: ${{ env.ALIYUN_ACR_USERNAME }}
+          password: ${{ env.ALIYUN_ACR_PASSWORD }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -71,8 +78,10 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ steps.image.outputs.image }}
-            ${{ env.IMAGE_REPOSITORY }}:latest
+            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}:latest
+            ${{ env.ALIYUN_ACR_REGISTRY }}/${{ env.NEW_API_IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.ALIYUN_ACR_REGISTRY }}/${{ env.NEW_API_IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -85,7 +94,6 @@ jobs:
       contents: read
       packages: read
     env:
-      NEW_API_IMAGE: ${{ needs.build-and-push.outputs.image }}
       NEW_API_MYSQL_ROOT_PASSWORD: ${{ secrets.NEW_API_MYSQL_ROOT_PASSWORD }}
       NEW_API_MYSQL_PASSWORD: ${{ secrets.NEW_API_MYSQL_PASSWORD }}
       NEW_API_REDIS_PASSWORD: ${{ secrets.NEW_API_REDIS_PASSWORD }}
@@ -94,13 +102,6 @@ jobs:
     steps:
       - name: Checkout deployment files
         uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy with Docker Compose
         shell: bash
@@ -113,6 +114,10 @@ jobs:
             NEW_API_REDIS_PASSWORD
             NEW_API_SESSION_SECRET
             NEW_API_CRYPTO_SECRET
+            ALIYUN_ACR_REGISTRY
+            ALIYUN_ACR_USERNAME
+            ALIYUN_ACR_PASSWORD
+            NEW_API_IMAGE_NAME
           )
           for name in "${required[@]}"; do
             if [[ -z "${!name:-}" ]]; then
@@ -120,6 +125,26 @@ jobs:
               exit 1
             fi
           done
+
+          export DOCKER_CONFIG="$(mktemp -d)"
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+
+          printf '%s' "${{ github.token }}" |
+            docker login "$GHCR_REGISTRY" -u "${{ github.actor }}" --password-stdin
+          printf '%s' "$ALIYUN_ACR_PASSWORD" |
+            docker login "$ALIYUN_ACR_REGISTRY" -u "$ALIYUN_ACR_USERNAME" --password-stdin
+
+          GHCR_IMAGE="${GHCR_REGISTRY}/${GHCR_IMAGE_NAME}:${GITHUB_SHA}"
+          ACR_IMAGE="${ALIYUN_ACR_REGISTRY}/${NEW_API_IMAGE_NAME}:${GITHUB_SHA}"
+          if docker pull "$GHCR_IMAGE"; then
+            NEW_API_IMAGE="$GHCR_IMAGE"
+          elif docker pull "$ACR_IMAGE"; then
+            echo "GHCR pull failed; using Aliyun ACR fallback."
+            NEW_API_IMAGE="$ACR_IMAGE"
+          else
+            echo "Unable to pull the release image from GHCR or Aliyun ACR." >&2
+            exit 1
+          fi
 
           DEPLOY_DIR="${RUNNER_TEMP}/new-api-prod"
           mkdir -p "$DEPLOY_DIR"
