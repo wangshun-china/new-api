@@ -23,7 +23,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 
-import { HeroTerminalDemo } from '../hero-terminal-demo'
+import { Promo } from './promo'
 
 const PROJECT_DOCUMENTATION_URL = 'https://docs.newapi.pro'
 
@@ -201,12 +201,12 @@ export function Hero(props: HeroProps) {
           </div>
         </div>
 
-        {/* Right Column: Hero Terminal API Demo */}
+        {/* Right Column: Plan Promotions */}
         <div
           className='landing-animate-fade-up flex w-full justify-center opacity-0 lg:col-span-6'
           style={{ animationDelay: '320ms' }}
         >
-          <HeroTerminalDemo className='mt-8 lg:mt-0' />
+          <Promo className='mt-8 lg:mt-0' />
         </div>
       </div>
     </section>

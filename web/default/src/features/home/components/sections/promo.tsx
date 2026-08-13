@@ -18,13 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
-import { AnimateInView } from '@/components/animate-in-view'
+import { cn } from '@/lib/utils'
 
 interface PromoProps {
   className?: string
 }
 
-export function Promo(_props: PromoProps) {
+export function Promo(props: PromoProps) {
   const { t } = useTranslation()
 
   const images = [
@@ -39,38 +39,34 @@ export function Promo(_props: PromoProps) {
   ]
 
   return (
-    <section className='border-border/40 relative z-10 border-t px-6 py-24 md:py-32'>
-      <div className='mx-auto max-w-6xl'>
-        <AnimateInView className='mb-16 text-center md:mb-20'>
-          <p className='text-muted-foreground mb-3 text-xs font-medium tracking-widest uppercase'>
-            {t('Plans & Promotions')}
-          </p>
-          <h2 className='text-2xl font-bold tracking-tight md:text-3xl'>
-            {t('Choose the plan that fits you')}
-          </h2>
-          <p className='text-muted-foreground/80 mx-auto mt-5 max-w-2xl text-sm leading-relaxed md:text-base'>
-            {t('To purchase a plan, search "Xixi Box" on Xianyu.')}
-          </p>
-        </AnimateInView>
-
-        <div className='grid gap-6 sm:grid-cols-2'>
-          {images.map((img, i) => (
-            <AnimateInView
-              key={img.src}
-              delay={i * 100}
-              animation='fade-up'
-              className='border-border/40 bg-muted/10 overflow-hidden rounded-2xl border p-3'
-            >
-              <img
-                src={img.src}
-                alt={img.alt}
-                loading='lazy'
-                className='mx-auto h-auto max-h-[600px] w-full rounded-xl object-contain'
-              />
-            </AnimateInView>
-          ))}
-        </div>
+    <div className={cn('w-full', props.className)}>
+      <div className='mb-6 text-center'>
+        <p className='text-muted-foreground mb-2 text-[11px] font-medium tracking-[0.15em] uppercase'>
+          {t('Plans & Promotions')}
+        </p>
+        <h2 className='text-xl leading-tight font-bold tracking-tight md:text-2xl'>
+          {t('Choose the plan that fits you')}
+        </h2>
+        <p className='text-muted-foreground/80 mx-auto mt-3 max-w-md text-sm leading-relaxed'>
+          {t('To purchase a plan, search "Xixi Box" on Xianyu.')}
+        </p>
       </div>
-    </section>
+
+      <div className='grid gap-5 sm:grid-cols-2'>
+        {images.map((img) => (
+          <div
+            key={img.src}
+            className='border-border/40 bg-muted/10 overflow-hidden rounded-2xl border p-2'
+          >
+            <img
+              src={img.src}
+              alt={img.alt}
+              loading='lazy'
+              className='mx-auto h-auto max-h-[440px] w-full rounded-xl object-contain'
+            />
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
