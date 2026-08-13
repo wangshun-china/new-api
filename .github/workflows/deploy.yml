@@ -84,6 +84,10 @@ jobs:
             ${{ env.ALIYUN_ACR_REGISTRY }}/${{ env.NEW_API_IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Aliyun ACR Personal rejects OCI provenance/SBOM artifacts
+          # (application/vnd.oci.empty.v1+json). Disable them for the push.
+          provenance: false
+          sbom: false
 
   deploy:
     name: Deploy to ${{ needs.resolve-context.outputs.target_env }}
