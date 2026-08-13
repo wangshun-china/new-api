@@ -48,6 +48,7 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
     detail: true,
     token: true,
     log: true,
+    log_user: true,
     midjourney: true,
     task: true,
   },
@@ -165,8 +166,11 @@ function parseUserSidebarConfig(
  * layer: if admin disables a section/module it is always hidden. User config
  * is a second narrower layer: it can only further hide what admin allowed.
  * A null user config means "do not narrow" (legacy/empty users).
- * The usage-log module (console.log) is additionally hard-restricted to admin
- * users: non-admins never see it, regardless of either config layer.
+ *
+ * The usage-log module (console.log) is special: it has two admin switches.
+ *   - console.log       controls visibility for BOTH admins and users;
+ *   - console.log_user  additionally gates users only (admins ignore it).
+ * So admins see usage logs iff console.log is on; users need BOTH on.
  */
 function isModuleEnabled(
   url: string,
@@ -182,10 +186,18 @@ function isModuleEnabled(
 
   const { section, module } = mapping
 
-  // Usage logs are admin-only: non-admin users never see this module,
-  // regardless of the admin or user sidebar_modules config.
-  if (!isAdmin && section === 'console' && module === 'log') {
-    return false
+  // Usage logs use the two-switch model; short-circuit before the generic
+  // admin × user AND gate below (and skip the user overlay entirely).
+  if (section === 'console' && module === 'log') {
+    const adminSection = adminConfig[section]
+    const adminAllowed = Boolean(
+      adminSection && adminSection.enabled && adminSection.log === true
+    )
+    if (!adminAllowed) return false
+    // Admins only depend on the first switch; users additionally need
+    // console.log_user to be on.
+    if (isAdmin) return true
+    return adminSection.log_user === true
   }
 
   const adminSection = adminConfig[section]

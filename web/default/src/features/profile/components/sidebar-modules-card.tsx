@@ -31,7 +31,6 @@ import {
 } from '@/components/ui/card'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Switch } from '@/components/ui/switch'
-import { useIsAdmin } from '@/hooks/use-admin'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -55,7 +54,6 @@ export function SidebarModulesCard() {
   const [config, setConfig] = useState<SidebarModulesConfig>({})
   const currentUser = useAuthStore((s) => s.auth.user)
   const setUser = useAuthStore((s) => s.auth.setUser)
-  const isAdmin = useIsAdmin()
 
   const sectionDefs: SectionDef[] = [
     {
@@ -105,7 +103,7 @@ export function SidebarModulesCard() {
           title: t('Task Logs'),
           description: t('System task records'),
         },
-      ].filter((mod) => isAdmin || mod.key !== 'log'),
+      ].filter((mod) => mod.key !== 'log'),
     },
     {
       key: 'personal',

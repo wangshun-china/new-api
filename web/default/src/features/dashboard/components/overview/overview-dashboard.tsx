@@ -544,6 +544,7 @@ export function OverviewDashboard() {
         description: t('Inspect requests, errors, and billing details'),
         to: '/usage-logs',
         icon: FileText,
+        adminOnly: true,
       },
       {
         title: t('Pricing'),
