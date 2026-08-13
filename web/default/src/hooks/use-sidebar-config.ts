@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useMemo } from 'react'
 
 import type { NavGroup, NavItem } from '@/components/layout/types'
+import { useIsAdmin } from '@/hooks/use-admin'
 import { useStatus } from '@/hooks/use-status'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -164,11 +165,14 @@ function parseUserSidebarConfig(
  * layer: if admin disables a section/module it is always hidden. User config
  * is a second narrower layer: it can only further hide what admin allowed.
  * A null user config means "do not narrow" (legacy/empty users).
+ * The usage-log module (console.log) is additionally hard-restricted to admin
+ * users: non-admins never see it, regardless of either config layer.
  */
 function isModuleEnabled(
   url: string,
   adminConfig: SidebarModulesAdminConfig,
-  userConfig: SidebarModulesUserConfig
+  userConfig: SidebarModulesUserConfig,
+  isAdmin: boolean
 ): boolean {
   const mapping = URL_TO_CONFIG_MAP[url]
   if (!mapping) {
@@ -177,6 +181,13 @@ function isModuleEnabled(
   }
 
   const { section, module } = mapping
+
+  // Usage logs are admin-only: non-admin users never see this module,
+  // regardless of the admin or user sidebar_modules config.
+  if (!isAdmin && section === 'console' && module === 'log') {
+    return false
+  }
+
   const adminSection = adminConfig[section]
   const adminAllowed = Boolean(
     adminSection && adminSection.enabled && adminSection[module] === true
@@ -197,7 +208,8 @@ function isModuleEnabled(
 function isNavItemVisible(
   item: NavItem,
   adminConfig: SidebarModulesAdminConfig,
-  userConfig: SidebarModulesUserConfig
+  userConfig: SidebarModulesUserConfig,
+  isAdmin: boolean
 ): boolean {
   // Handle dynamic chat presets type — also runs the admin × user AND gate
   if ('type' in item && item.type === 'chat-presets') {
@@ -215,7 +227,7 @@ function isNavItemVisible(
   if ('url' in item && item.url) {
     const configUrls = item.configUrls ?? [item.url]
     return configUrls.some((url) =>
-      isModuleEnabled(url as string, adminConfig, userConfig)
+      isModuleEnabled(url as string, adminConfig, userConfig, isAdmin)
     )
   }
 
@@ -223,7 +235,7 @@ function isNavItemVisible(
   if ('items' in item && item.items) {
     // If has sub-items, show this collapsible item if at least one sub-item is visible
     return item.items.some((subItem) =>
-      isModuleEnabled(subItem.url as string, adminConfig, userConfig)
+      isModuleEnabled(subItem.url as string, adminConfig, userConfig, isAdmin)
     )
   }
 
@@ -236,14 +248,15 @@ function isNavItemVisible(
 function filterNavItems(
   items: NavItem[],
   adminConfig: SidebarModulesAdminConfig,
-  userConfig: SidebarModulesUserConfig
+  userConfig: SidebarModulesUserConfig,
+  isAdmin: boolean
 ): NavItem[] {
   return items
     .map((item) => {
       // If collapsible item, also filter its sub-items
       if ('items' in item && item.items) {
         const filteredSubItems = item.items.filter((subItem) =>
-          isModuleEnabled(subItem.url as string, adminConfig, userConfig)
+          isModuleEnabled(subItem.url as string, adminConfig, userConfig, isAdmin)
         )
 
         return {
@@ -253,7 +266,7 @@ function filterNavItems(
       }
       return item
     })
-    .filter((item) => isNavItemVisible(item, adminConfig, userConfig))
+    .filter((item) => isNavItemVisible(item, adminConfig, userConfig, isAdmin))
 }
 
 /**
@@ -275,6 +288,7 @@ function filterNavItems(
 export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
   const { status } = useStatus()
   const { auth } = useAuthStore()
+  const isAdmin = useIsAdmin()
 
   const adminConfig = useMemo(
     () =>
@@ -301,10 +315,10 @@ export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
       navGroups
         .map((group) => ({
           ...group,
-          items: filterNavItems(group.items, adminConfig, userConfig),
+          items: filterNavItems(group.items, adminConfig, userConfig, isAdmin),
         }))
         .filter((group) => group.items.length > 0), // Only show navigation groups with visible items
-    [navGroups, adminConfig, userConfig]
+    [navGroups, adminConfig, userConfig, isAdmin]
   )
 
   return filteredNavGroups
@@ -318,6 +332,7 @@ export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
 export function useIsSidebarModuleVisible(url: string): boolean {
   const { status } = useStatus()
   const { auth } = useAuthStore()
+  const isAdmin = useIsAdmin()
 
   const adminConfig = parseSidebarConfig(
     status?.SidebarModulesAdmin as string | null | undefined
@@ -327,5 +342,5 @@ export function useIsSidebarModuleVisible(url: string): boolean {
       ? null
       : parseUserSidebarConfig(auth?.user?.sidebar_modules)
 
-  return isModuleEnabled(url, adminConfig, userConfig)
+  return isModuleEnabled(url, adminConfig, userConfig, isAdmin)
 }
