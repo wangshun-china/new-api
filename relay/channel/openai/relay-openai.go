@@ -25,6 +25,10 @@ func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, fo
 		return nil
 	}
 
+	// OaiStreamHandler 对最后一个分片会直接调用本函数（不经 HandleStreamFormat），
+	// 因此模型名改写需要在这里再做一次；重复调用是幂等的。
+	data = rewriteMappedModelName(info, data)
+
 	if !forceFormat && !thinkToContent {
 		return helper.StringData(c, data)
 	}
@@ -211,6 +215,10 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 			return nil, types.NewOpenAIError(fmt.Errorf("openrouter response success=false"), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 		}
 	}
+
+	// 在解析前改写映射模型名，OpenAI 原样透传与 Claude/Gemini 格式转换
+	// 两条路径都会继承改写后的模型名。
+	responseBody = []byte(rewriteMappedModelName(info, string(responseBody)))
 
 	err = common.Unmarshal(responseBody, &simpleResponse)
 	if err != nil {

@@ -19,9 +19,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// rewriteMappedModelName 将响应中的上游模型名改写回用户请求的对外模型名，
+// 仅在本次请求发生模型映射时生效。模型名是简单 token，这里做带引号的精确
+// 子串替换，以兼容流式分片原样透传路径，避免逐 chunk 解析 JSON；若上游
+// 序列化格式差异（如带空格）导致未命中，则保持原文不改写。
+func rewriteMappedModelName(info *relaycommon.RelayInfo, data string) string {
+	if !info.IsModelMapped || info.UpstreamModelName == "" || info.OriginModelName == "" {
+		return data
+	}
+	return strings.Replace(data,
+		`"model":"`+info.UpstreamModelName+`"`,
+		`"model":"`+info.OriginModelName+`"`, 1)
+}
+
 // 辅助函数
 func HandleStreamFormat(c *gin.Context, info *relaycommon.RelayInfo, data string, forceFormat bool, thinkToContent bool) error {
 	info.SendResponseCount++
+	data = rewriteMappedModelName(info, data)
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
@@ -165,6 +179,9 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
+		if info.IsModelMapped && info.OriginModelName != "" {
+			model = info.OriginModelName
+		}
 		if info.ShouldIncludeUsage && !containStreamUsage {
 			response := helper.GenerateFinalUsageResponse(responseId, createAt, model, *usage)
 			response.SetSystemFingerprint(systemFingerprint)
