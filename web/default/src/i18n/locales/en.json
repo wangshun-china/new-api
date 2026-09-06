@@ -1266,7 +1266,7 @@
     "Default model call chart": "Default model call chart",
     "Default range": "Default range",
     "Default Responses API version, if empty, will use the API version above": "Default Responses API version, if empty, will use the API version above",
-    "Default system prompt for this channel": "Default system prompt for this channel",
+    "Default system prompt for this channel. Supports {original_model} and {upstream_model} placeholders.": "Default system prompt for this channel. Supports {original_model} and {upstream_model} placeholders.",
     "Default time granularity": "Default time granularity",
     "Default to auto groups": "Default to auto groups",
     "Default TTL (seconds)": "Default TTL (seconds)",

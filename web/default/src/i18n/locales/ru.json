@@ -1266,7 +1266,7 @@
     "Default model call chart": "График вызовов моделей по умолчанию",
     "Default range": "Диапазон по умолчанию",
     "Default Responses API version, if empty, will use the API version above": "Версия API ответов по умолчанию; если пусто, будет использоваться версия API, указанная выше",
-    "Default system prompt for this channel": "Системный промпт по умолчанию для этого канала",
+    "Default system prompt for this channel. Supports {original_model} and {upstream_model} placeholders.": "Системный промпт по умолчанию для этого канала. Поддерживает подстановки {original_model} и {upstream_model}.",
     "Default time granularity": "Гранулярность времени по умолчанию",
     "Default to auto groups": "По умолчанию использовать автогруппы",
     "Default TTL (seconds)": "TTL по умолчанию (секунды)",

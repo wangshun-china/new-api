@@ -4199,7 +4199,7 @@ export function ChannelMutateDrawer({
                                   </FormControl>
                                   <FormDescription>
                                     {t(
-                                      'Default system prompt for this channel'
+                                      'Default system prompt for this channel. Supports {original_model} and {upstream_model} placeholders.'
                                     )}
                                   </FormDescription>
                                   <FormMessage />

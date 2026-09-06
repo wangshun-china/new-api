@@ -1266,7 +1266,7 @@
     "Default model call chart": "預設模型呼叫圖",
     "Default range": "預設範圍",
     "Default Responses API version, if empty, will use the API version above": "預設回應 API 版本，如果為空，將使用上面的 API 版本",
-    "Default system prompt for this channel": "此渠道的預設系統提示",
+    "Default system prompt for this channel. Supports {original_model} and {upstream_model} placeholders.": "Default system prompt for this channel. Supports {original_model} and {upstream_model} placeholders.",
     "Default time granularity": "預設時間粒度",
     "Default to auto groups": "預設使用自動分組",
     "Default TTL (seconds)": "預設 TTL（秒）",

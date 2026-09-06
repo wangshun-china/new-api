@@ -1266,7 +1266,7 @@
     "Default model call chart": "默认模型调用图",
     "Default range": "默认范围",
     "Default Responses API version, if empty, will use the API version above": "默认响应 API 版本，如果为空，将使用上面的 API 版本",
-    "Default system prompt for this channel": "此渠道的默认系统提示",
+    "Default system prompt for this channel. Supports {original_model} and {upstream_model} placeholders.": "此渠道的默认系统提示词，支持 {original_model} 和 {upstream_model} 占位符。",
     "Default time granularity": "默认时间粒度",
     "Default to auto groups": "默认使用自动分组",
     "Default TTL (seconds)": "默认 TTL（秒）",
