@@ -140,13 +140,16 @@ jobs:
 
           GHCR_IMAGE="${GHCR_REGISTRY}/${GHCR_IMAGE_NAME}:${GITHUB_SHA}"
           ACR_IMAGE="${ALIYUN_ACR_REGISTRY}/${NEW_API_IMAGE_NAME}:${GITHUB_SHA}"
-          if docker pull "$GHCR_IMAGE"; then
-            NEW_API_IMAGE="$GHCR_IMAGE"
-          elif docker pull "$ACR_IMAGE"; then
-            echo "GHCR pull failed; using Aliyun ACR fallback."
+          # The runner sits on Aliyun: ACR is same-region and fast, so try it
+          # first. Guard each attempt with a hard timeout so a stalled pull
+          # falls through to the other registry instead of hanging forever.
+          if timeout 180 docker pull "$ACR_IMAGE"; then
             NEW_API_IMAGE="$ACR_IMAGE"
+          elif timeout 180 docker pull "$GHCR_IMAGE"; then
+            echo "ACR pull failed; using GHCR fallback."
+            NEW_API_IMAGE="$GHCR_IMAGE"
           else
-            echo "Unable to pull the release image from GHCR or Aliyun ACR." >&2
+            echo "Unable to pull the release image from Aliyun ACR or GHCR." >&2
             exit 1
           fi
 
@@ -202,7 +205,9 @@ jobs:
 
   deploy-slave:
     name: Deploy to slave node
-    needs: [resolve-context, build-and-push]
+    # Run after the master node deploy: the slave connects to the master's
+    # MySQL/Redis, which are only published once the master compose is up.
+    needs: [resolve-context, build-and-push, deploy]
     runs-on: ubuntu-latest
     # The slave node is optional infrastructure: if its server is gone or
     # unreachable, this job must never fail the pipeline or block the master
