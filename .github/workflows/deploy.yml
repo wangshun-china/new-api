@@ -170,6 +170,10 @@ jobs:
           REDIS_PASSWORD=${NEW_API_REDIS_PASSWORD}
           SESSION_SECRET=${NEW_API_SESSION_SECRET}
           CRYPTO_SECRET=${NEW_API_CRYPTO_SECRET}
+          # Published so the slave node can reach MySQL/Redis; the cloud
+          # security group must restrict 3306/6379 to the slave node IP only.
+          MYSQL_PUBLISH_BIND=0.0.0.0
+          REDIS_PUBLISH_BIND=0.0.0.0
           RELAY_TIMEOUT=0
           STREAMING_TIMEOUT=300
           MAX_REQUEST_BODY_MB=128
@@ -195,3 +199,117 @@ jobs:
           docker image prune -f
 
           echo "Deployment completed: ${NEW_API_IMAGE}"
+
+  deploy-slave:
+    name: Deploy to slave node
+    needs: [resolve-context, build-and-push]
+    runs-on: ubuntu-latest
+    # The slave node is optional infrastructure: if its server is gone or
+    # unreachable, this job must never fail the pipeline or block the master
+    # node deployment above.
+    continue-on-error: true
+    env:
+      ALIYUN_ACR_REGISTRY: ${{ vars.ALIYUN_ACR_REGISTRY }}
+      ALIYUN_ACR_USERNAME: ${{ vars.ALIYUN_ACR_USERNAME }}
+      ALIYUN_ACR_PASSWORD: ${{ secrets.ALIYUN_ACR_PASSWORD }}
+      NEW_API_IMAGE_NAME: ${{ vars.NEW_API_IMAGE_NAME }}
+      NEW_API_MYSQL_PASSWORD: ${{ secrets.NEW_API_MYSQL_PASSWORD }}
+      NEW_API_REDIS_PASSWORD: ${{ secrets.NEW_API_REDIS_PASSWORD }}
+      NEW_API_SESSION_SECRET: ${{ secrets.NEW_API_SESSION_SECRET }}
+      NEW_API_CRYPTO_SECRET: ${{ secrets.NEW_API_CRYPTO_SECRET }}
+      NEW_NODE_HOST: ${{ secrets.NEW_NODE_HOST }}
+      NEW_NODE_USER: ${{ secrets.NEW_NODE_USER || 'root' }}
+      NEW_NODE_SSH_KEY: ${{ secrets.NEW_NODE_SSH_KEY }}
+      MASTER_DB_HOST: ${{ secrets.MASTER_DB_HOST }}
+    steps:
+      - name: Check slave node configuration
+        id: config
+        shell: bash
+        run: |
+          if [[ -z "${NEW_NODE_HOST:-}" || -z "${NEW_NODE_SSH_KEY:-}" || -z "${MASTER_DB_HOST:-}" ]]; then
+            echo "NEW_NODE_HOST / NEW_NODE_SSH_KEY / MASTER_DB_HOST not configured; skipping slave deployment."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout deployment files
+        if: steps.config.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - name: Deploy with Docker Compose over SSH
+        if: steps.config.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          for name in ALIYUN_ACR_REGISTRY ALIYUN_ACR_USERNAME ALIYUN_ACR_PASSWORD \
+            NEW_API_IMAGE_NAME NEW_API_MYSQL_PASSWORD NEW_API_REDIS_PASSWORD \
+            NEW_API_SESSION_SECRET NEW_API_CRYPTO_SECRET; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+
+          ACR_IMAGE="${ALIYUN_ACR_REGISTRY}/${NEW_API_IMAGE_NAME}:${GITHUB_SHA}"
+          SSH_KEY="$(mktemp -d)/deploy_key"
+          printf '%s\n' "$NEW_NODE_SSH_KEY" > "$SSH_KEY"
+          chmod 600 "$SSH_KEY"
+          SSH_OPTS=(-i "$SSH_KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
+
+          ssh "${SSH_OPTS[@]}" "${NEW_NODE_USER}@${NEW_NODE_HOST}" "mkdir -p /opt/new-api-slave"
+          scp "${SSH_OPTS[@]}" deploy/docker-compose.slave.yml \
+            "${NEW_NODE_USER}@${NEW_NODE_HOST}:/opt/new-api-slave/docker-compose.yml"
+
+          ssh "${SSH_OPTS[@]}" "${NEW_NODE_USER}@${NEW_NODE_HOST}" \
+            "env NEW_API_IMAGE='$ACR_IMAGE' MASTER_DB_HOST='$MASTER_DB_HOST' \
+            MYSQL_PASSWORD='$NEW_API_MYSQL_PASSWORD' REDIS_PASSWORD='$NEW_API_REDIS_PASSWORD' \
+            SESSION_SECRET='$NEW_API_SESSION_SECRET' CRYPTO_SECRET='$NEW_API_CRYPTO_SECRET' \
+            ALIYUN_ACR_REGISTRY='$ALIYUN_ACR_REGISTRY' ALIYUN_ACR_USERNAME='$ALIYUN_ACR_USERNAME' \
+            ALIYUN_ACR_PASSWORD='$ALIYUN_ACR_PASSWORD' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          DEPLOY_DIR="/opt/new-api-slave"
+          umask 077
+          cat > "${DEPLOY_DIR}/.env" <<EOF2
+          COMPOSE_PROJECT_NAME=new-api-slave
+          NEW_API_BIND_ADDRESS=0.0.0.0
+          NEW_API_PORT=7777
+          NEW_API_IMAGE=${NEW_API_IMAGE}
+          MASTER_DB_HOST=${MASTER_DB_HOST}
+          MYSQL_DATABASE=new_api
+          MYSQL_USER=newapi
+          MYSQL_PASSWORD=${MYSQL_PASSWORD}
+          REDIS_PASSWORD=${REDIS_PASSWORD}
+          SESSION_SECRET=${SESSION_SECRET}
+          CRYPTO_SECRET=${CRYPTO_SECRET}
+          NODE_NAME=new-api-slave-1
+          RELAY_TIMEOUT=0
+          STREAMING_TIMEOUT=300
+          MAX_REQUEST_BODY_MB=128
+          STREAM_SCANNER_MAX_BUFFER_MB=128
+          EOF2
+          chmod 600 "${DEPLOY_DIR}/.env"
+
+          printf '%s' "${ALIYUN_ACR_PASSWORD}" |
+            docker login "${ALIYUN_ACR_REGISTRY}" -u "${ALIYUN_ACR_USERNAME}" --password-stdin
+
+          cd "${DEPLOY_DIR}"
+          docker compose --env-file .env -f docker-compose.yml config --quiet
+          docker compose --env-file .env -f docker-compose.yml pull
+
+          if ! docker compose --env-file .env -f docker-compose.yml up \
+            -d --remove-orphans --wait --wait-timeout 600; then
+            docker compose --env-file .env -f docker-compose.yml ps
+            docker compose --env-file .env -f docker-compose.yml logs --tail 150 new-api
+            exit 1
+          fi
+
+          curl --fail --silent --show-error \
+            http://127.0.0.1:7777/api/status >/dev/null
+          docker compose --env-file .env -f docker-compose.yml ps
+          docker image prune -f
+
+          echo "Slave deployment completed: ${NEW_API_IMAGE}"
+          REMOTE

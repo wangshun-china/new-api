@@ -1,0 +1,65 @@
+# New-API slave node (multi-node deployment)
+#
+# Runs only the new-api container; MySQL and Redis are provided by the master
+# node (deploy/docker-compose.local.yml with MYSQL_PUBLISH_BIND/REDIS_PUBLISH_BIND
+# opened). This node is started with NODE_TYPE=slave so it never runs database
+# migrations or background tasks — those stay on the master.
+#
+# Required .env values: NEW_API_IMAGE, MASTER_DB_HOST, MYSQL_PASSWORD,
+# REDIS_PASSWORD, SESSION_SECRET, CRYPTO_SECRET. SESSION_SECRET and
+# CRYPTO_SECRET MUST be identical to the master node's values.
+
+name: ${COMPOSE_PROJECT_NAME:-new-api-slave}
+
+services:
+  new-api:
+    image: ${NEW_API_IMAGE:?set NEW_API_IMAGE}
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    ports:
+      - "${NEW_API_BIND_ADDRESS:-0.0.0.0}:${NEW_API_PORT:-7777}:3000"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      SQL_DSN: "${MYSQL_USER:-newapi}:${MYSQL_PASSWORD:?set MYSQL_PASSWORD}@tcp(${MASTER_DB_HOST:?set MASTER_DB_HOST}:3306)/${MYSQL_DATABASE:-new_api}?charset=utf8mb4&parseTime=True&loc=Local"
+      REDIS_CONN_STRING: "redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@${MASTER_DB_HOST}:6379/0"
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+      CRYPTO_SECRET: ${CRYPTO_SECRET:?set CRYPTO_SECRET}
+      NODE_NAME: ${NODE_NAME:-new-api-slave-1}
+      NODE_TYPE: slave
+      ERROR_LOG_ENABLED: "true"
+      BATCH_UPDATE_ENABLED: "true"
+      MEMORY_CACHE_ENABLED: "true"
+      GENERATE_DEFAULT_TOKEN: "false"
+      RELAY_TIMEOUT: ${RELAY_TIMEOUT:-0}
+      STREAMING_TIMEOUT: ${STREAMING_TIMEOUT:-300}
+      MAX_REQUEST_BODY_MB: ${MAX_REQUEST_BODY_MB:-128}
+      STREAM_SCANNER_MAX_BUFFER_MB: ${STREAM_SCANNER_MAX_BUFFER_MB:-128}
+      SESSION_COOKIE_SECURE: "false"
+    volumes:
+      - new-api-data:/data
+      - new-api-logs:/app/logs
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -q -O - http://127.0.0.1:3000/api/status |
+          grep -q '"success":[[:space:]]*true'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - new-api-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  new-api-data:
+  new-api-logs:
+
+networks:
+  new-api-network:
+    driver: bridge

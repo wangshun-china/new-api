@@ -58,6 +58,12 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-new_api}
       MYSQL_USER: ${MYSQL_USER:-newapi}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
+    # Multi-node deployments need MySQL reachable from slave nodes.
+    # Default binds to loopback only; set MYSQL_PUBLISH_BIND=0.0.0.0 when a
+    # slave node must connect, and restrict access with a host firewall or
+    # cloud security group (allow only slave node IPs).
+    ports:
+      - "${MYSQL_PUBLISH_BIND:-127.0.0.1}:3306:3306"
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
@@ -88,6 +94,10 @@ services:
       - /bin/sh
       - -c
       - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    # See the MySQL ports comment above; set REDIS_PUBLISH_BIND=0.0.0.0 for
+    # multi-node deployments and restrict access with a firewall.
+    ports:
+      - "${REDIS_PUBLISH_BIND:-127.0.0.1}:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
