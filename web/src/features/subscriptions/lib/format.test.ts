@@ -16,19 +16,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
+import { describe, expect, test } from 'vitest'
 
 import { quotaUnitsToRequestCount } from './format'
 
 describe('subscription request quota display', () => {
   test('converts internal quota to requests at $0.01 each', () => {
-    assert.equal(quotaUnitsToRequestCount(25_000_000, 500_000), 5_000)
-    assert.equal(quotaUnitsToRequestCount(5_000, 500_000), 1)
+    expect(quotaUnitsToRequestCount(25_000_000, 500_000)).toBe(5_000)
+    expect(quotaUnitsToRequestCount(5_000, 500_000)).toBe(1)
   })
 
   test('returns zero for invalid quota configuration', () => {
-    assert.equal(quotaUnitsToRequestCount(-1, 500_000), 0)
-    assert.equal(quotaUnitsToRequestCount(5_000, 0), 0)
+    expect(quotaUnitsToRequestCount(-1, 500_000)).toBe(0)
+    expect(quotaUnitsToRequestCount(5_000, 0)).toBe(0)
   })
 })
