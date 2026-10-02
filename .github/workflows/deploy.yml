@@ -13,6 +13,11 @@ on:
         options:
           - wsl
           - aliyun
+      deploy_enabled:
+        description: Deploy after build (false = build/push image only)
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: new-api-deploy-${{ github.event.inputs.target_env || 'aliyun' }}
@@ -91,6 +96,7 @@ jobs:
 
   deploy:
     name: Deploy to ${{ needs.resolve-context.outputs.target_env }}
+    if: github.event.inputs.deploy_enabled != 'false'
     needs: [resolve-context, build-and-push]
     runs-on: [self-hosted, "${{ needs.resolve-context.outputs.target_env }}"]
     environment: ${{ needs.resolve-context.outputs.target_env }}
@@ -207,6 +213,7 @@ jobs:
     name: Deploy to slave node
     # Run after the master node deploy: the slave connects to the master's
     # MySQL/Redis, which are only published once the master compose is up.
+    if: github.event.inputs.deploy_enabled != 'false'
     needs: [resolve-context, build-and-push, deploy]
     runs-on: ubuntu-latest
     # The slave node is optional infrastructure: if its server is gone or
