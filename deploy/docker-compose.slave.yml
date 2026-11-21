@@ -58,7 +58,19 @@ services:
 
 volumes:
   new-api-data:
+    name: ${COMPOSE_PROJECT_NAME}_host_new-api-data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${PROJECT_DATA_DIR:?PROJECT_DATA_DIR is required}/new-api-data"
   new-api-logs:
+    name: ${COMPOSE_PROJECT_NAME}_host_new-api-logs
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${PROJECT_DATA_DIR:?PROJECT_DATA_DIR is required}/new-api-logs"
 
 networks:
   new-api-network:

@@ -159,13 +159,16 @@ jobs:
             exit 1
           fi
 
-          DEPLOY_DIR="${RUNNER_TEMP}/new-api-prod"
-          mkdir -p "$DEPLOY_DIR"
+          DEPLOY_DIR="$HOME/deployments/new-api"
+          PROJECT_DATA_DIR=/data/new-api-data
+          mkdir -p "$DEPLOY_DIR" "$PROJECT_DATA_DIR"/{new-api-data,new-api-logs,mysql-data,redis-data}
           cp deploy/docker-compose.local.yml "$DEPLOY_DIR/docker-compose.yml"
+          cp deploy/docker-compose.data.yml "$DEPLOY_DIR/docker-compose.data.yml"
 
           umask 077
           cat > "$DEPLOY_DIR/.env" <<EOF
           COMPOSE_PROJECT_NAME=new-api-local
+          PROJECT_DATA_DIR=${PROJECT_DATA_DIR}
           NEW_API_BIND_ADDRESS=0.0.0.0
           NEW_API_PORT=7777
           NEW_API_IMAGE=${NEW_API_IMAGE}
@@ -191,20 +194,20 @@ jobs:
           chmod 600 "$DEPLOY_DIR/.env"
 
           cd "$DEPLOY_DIR"
-          docker compose --env-file .env -f docker-compose.yml config --quiet
-          docker compose --env-file .env -f docker-compose.yml pull
+          docker compose --env-file .env -f docker-compose.yml -f docker-compose.data.yml config --quiet
+          docker compose --env-file .env -f docker-compose.yml -f docker-compose.data.yml pull
 
-          if ! docker compose --env-file .env -f docker-compose.yml up \
+          if ! docker compose --env-file .env -f docker-compose.yml -f docker-compose.data.yml up \
             -d --remove-orphans --wait --wait-timeout 600; then
-            docker compose --env-file .env -f docker-compose.yml ps
-            docker compose --env-file .env -f docker-compose.yml logs \
+            docker compose --env-file .env -f docker-compose.yml -f docker-compose.data.yml ps
+            docker compose --env-file .env -f docker-compose.yml -f docker-compose.data.yml logs \
               --tail 150 new-api mysql redis
             exit 1
           fi
 
           curl --fail --silent --show-error \
             http://127.0.0.1:7777/api/status >/dev/null
-          docker compose --env-file .env -f docker-compose.yml ps
+          docker compose --env-file .env -f docker-compose.yml -f docker-compose.data.yml ps
           docker image prune -f
 
           echo "Deployment completed: ${NEW_API_IMAGE}"
@@ -283,9 +286,12 @@ jobs:
           set -Eeuo pipefail
 
           DEPLOY_DIR="/opt/new-api-slave"
+          PROJECT_DATA_DIR=/data/new-api-slave-data
+          mkdir -p "$PROJECT_DATA_DIR"/{new-api-data,new-api-logs}
           umask 077
           cat > "${DEPLOY_DIR}/.env" <<EOF2
           COMPOSE_PROJECT_NAME=new-api-slave
+          PROJECT_DATA_DIR=${PROJECT_DATA_DIR}
           NEW_API_BIND_ADDRESS=0.0.0.0
           NEW_API_PORT=7777
           NEW_API_IMAGE=${NEW_API_IMAGE}
